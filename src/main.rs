@@ -130,7 +130,7 @@ fn decode_instruction(state: &mut State, upper: u8, lower: u8) -> bool {
         0x6 => state.v_regs[x] = nn,
         0x7 => {
             let vx = state.v_regs[x];
-            state.v_regs[x] = vx + nn
+            state.v_regs[x] = vx.overflowing_add(nn).0
         },
         0x8 => {
             match bot {
@@ -202,15 +202,17 @@ fn decode_instruction(state: &mut State, upper: u8, lower: u8) -> bool {
             let n = bot as usize;
             let vx = state.v_regs[x] as usize;
             let vy = state.v_regs[y] as usize;
+            state.v_regs[0xf] = 0; // TODO: not sure
             for h in 0..n {
                 let new_byte = state.memory[state.i_reg + h];
                 for w in 0..8 {
-                    let new_pixel = (new_byte >> w) & 0x1;
-                    let old_pixel = state.screen[vx + w + CHIP8_WIDTH * (vy + h)];
-                    if (old_pixel > 0) && (new_pixel == 0) {
-                        state.v_regs[0xf] = 1
+                    if (new_byte & (0x80 >> w)) != 0 {
+                        let old_pixel = state.screen[vx + w + CHIP8_WIDTH * (vy + h)];
+                        if old_pixel > 0 {
+                            state.v_regs[0xf] = 1;
+                        }
+                        state.screen[vx + w + CHIP8_WIDTH * (vy + h)]  = old_pixel ^ 1
                     }
-                    state.screen[vx + w + CHIP8_WIDTH * (vy + h)] = new_pixel
                 }
             }
             ret = true
@@ -296,13 +298,15 @@ fn main() {
 
     // support only a single filename on the CL for the moment
     // TODO: support nice flags
-    if args.len() < 2 {
+    if args.len() < 3 {
         println!("Not enough arguments.");
-        println!("Usage: {} filename", args[0]);
+        println!("Usage: {} filename speed", args[0]);
         std::process::exit(1);
     }
 
     let filename = &args[1];
+    let speed : u128 = args[2].parse().unwrap();
+    println!("SPEED = {}", speed);
     let rom = fs::read(filename).expect("Can't read input file");
     let rom_len = rom.len();
 
@@ -370,7 +374,6 @@ fn main() {
         //     }
         // }
 
-
         window.get_keys().map(|keys| {
             for i in state.inputs.iter_mut() {
                 *i = false
@@ -413,6 +416,8 @@ fn main() {
             let upper = state.memory[pc];
             let lower = state.memory[pc + 1];
             state.pc = next(pc); // update pc before decoding the opcode
+            let opcode = build_opcode(upper, lower);
+            println!("{:#04x}\t{:04x}", pc, opcode);
             if decode_instruction(&mut state, upper, lower) {
                 // Update display
                 for y in 0..CHIP8_HEIGHT {
@@ -433,11 +438,11 @@ fn main() {
             }
         }
 
-        // keep to 500 Hz
+        // keep to speed (== 2 -> 500 MHz)
         loop {
             let next = SystemTime::now();
             let ms = next.duration_since(cur).unwrap().as_millis();
-            if ms >= 2 { break }
+            if ms >= speed { break }
         }
         cur = SystemTime::now();
 

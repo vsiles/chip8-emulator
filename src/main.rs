@@ -374,6 +374,24 @@ fn main() {
         //     }
         // }
 
+        // keep to speed (== 2 -> 500 MHz)
+        let now = SystemTime::now();
+        let ms = now.duration_since(cur).unwrap().as_millis();
+        if ms < speed { continue }
+
+        cur = SystemTime::now();
+
+        // 60 Hz
+        let delay = state.delay_timer;
+        if delay > 0 {
+            let ms = cur.duration_since(state.delay_timer_time).unwrap().as_millis();
+            if ms >= 17 {
+                state.delay_timer = delay - 1;
+                state.delay_timer_time = cur
+            }
+        }
+
+        // Input check
         window.get_keys().map(|keys| {
             for i in state.inputs.iter_mut() {
                 *i = false
@@ -435,23 +453,6 @@ fn main() {
                         }
                     }
                 }
-            }
-        }
-
-        // keep to speed (== 2 -> 500 MHz)
-        loop {
-            let next = SystemTime::now();
-            let ms = next.duration_since(cur).unwrap().as_millis();
-            if ms >= speed { break }
-        }
-        cur = SystemTime::now();
-
-        let delay = state.delay_timer;
-        if delay > 0 {
-            let ms = cur.duration_since(state.delay_timer_time).unwrap().as_millis();
-            if ms >= 17 {
-                state.delay_timer = delay - 1;
-                state.delay_timer_time = cur
             }
         }
     }
